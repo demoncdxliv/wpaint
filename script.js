@@ -8,18 +8,35 @@ window.addEventListener('load', () => {
     const brushSizeValue = document.getElementById('brushSizeValue');
     const clearButton = document.getElementById('clearButton');
 
-    // Встановлюємо розмір полотна на весь екран
+    // Налаштування розміру полотна
+    // Робимо його трохи меншим, щоб уникнути проблем з прокруткою на мобільних
+    canvas.width = window.innerWidth * 0.95;
     canvas.height = window.innerHeight * 0.7;
-    canvas.width = window.innerWidth * 0.9;
 
     // Змінні для малювання
     let painting = false;
     let brushColor = '#000000';
     let brushWidth = 5;
 
+    // Функція для отримання координат (працює і для миші, і для дотику)
+    function getEventCoordinates(event) {
+        const rect = canvas.getBoundingClientRect();
+        if (event.touches) {
+            return {
+                x: event.touches[0].clientX - rect.left,
+                y: event.touches[0].clientY - rect.top
+            };
+        }
+        return {
+            x: event.clientX - rect.left,
+            y: event.clientY - rect.top
+        };
+    }
+
     function startPosition(e) {
+        e.preventDefault(); // Запобігаємо небажаній поведінці (наприклад, прокрутці сторінки)
         painting = true;
-        draw(e); // Дозволяє малювати крапку при кліку
+        draw(e); // Дозволяє малювати крапку при кліку/дотику
     }
 
     function endPosition() {
@@ -30,10 +47,9 @@ window.addEventListener('load', () => {
     function draw(e) {
         if (!painting) return;
 
-        // Визначаємо координати курсору
-        const rect = canvas.getBoundingClientRect();
-        const x = e.clientX - rect.left;
-        const y = e.clientY - rect.top;
+        e.preventDefault();
+        
+        const { x, y } = getEventCoordinates(e);
 
         ctx.lineWidth = brushWidth;
         ctx.lineCap = 'round'; // Робить кінці ліній круглими
@@ -44,6 +60,8 @@ window.addEventListener('load', () => {
         ctx.beginPath(); // Починаємо новий шлях
         ctx.moveTo(x, y); // Переміщуємо "перо" в поточну точку
     }
+
+    // --- Слухачі подій ---
 
     // Оновлення налаштувань
     colorPicker.addEventListener('input', (e) => {
@@ -59,9 +77,15 @@ window.addEventListener('load', () => {
         ctx.clearRect(0, 0, canvas.width, canvas.height);
     });
 
-    // Слухачі подій миші
+    // Події миші (для комп'ютерів)
     canvas.addEventListener('mousedown', startPosition);
     canvas.addEventListener('mouseup', endPosition);
     canvas.addEventListener('mousemove', draw);
-    canvas.addEventListener('mouseout', endPosition); // Зупинити малювання, якщо курсор вийшов за межі
+    canvas.addEventListener('mouseout', endPosition); // Зупинити, якщо курсор вийшов за межі
+
+    // Події дотику (для планшетів та телефонів)
+    canvas.addEventListener('touchstart', startPosition);
+    canvas.addEventListener('touchend', endPosition);
+    canvas.addEventListener('touchmove', draw);
+    canvas.addEventListener('touchcancel', endPosition); // На випадок, якщо дотик скасовано системою
 });
