@@ -3,23 +3,219 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Vibe Paint</title>
-    <link rel="stylesheet" href="style.css">
+    <title>Пеінт Онлайн</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            background-color: #f0f2f5;
+            color: #333;
+            margin: 0;
+            padding: 15px;
+            /* Центруємо весь вміст */
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            gap: 15px;
+        }
+
+        h1 {
+            color: #0366d6;
+            margin: 0;
+        }
+
+        .controls {
+            display: flex;
+            flex-wrap: wrap; /* Дозволяє переносити елементи на новий рядок на малих екранах */
+            justify-content: center;
+            align-items: center;
+            gap: 10px 15px;
+            background-color: #fff;
+            padding: 15px;
+            border-radius: 10px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+            width: 100%;
+            max-width: 900px;
+            box-sizing: border-box; /* Враховує padding у ширину */
+        }
+        
+        .controls label {
+            font-weight: bold;
+        }
+
+        .controls input[type="color"] {
+            width: 40px;
+            height: 40px;
+            border: none;
+            cursor: pointer;
+            background: none;
+            padding: 0;
+        }
+
+        /* Стилі для кнопок */
+        .controls button {
+            padding: 10px 15px;
+            border: none;
+            color: white;
+            font-size: 16px;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+
+        .clear-button {
+            background-color: #ff4757;
+        }
+        
+        .save-button {
+            background-color: #28a745;
+        }
+        
+        .clear-button:hover {
+            background-color: #e04050;
+        }
+
+        .save-button:hover {
+            background-color: #218838;
+        }
+
+        /* Стилі для полотна */
+        #paintCanvas {
+            border: 2px solid #ccc;
+            background-color: #fff; /* Білий фон для збереження у PNG */
+            cursor: crosshair;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+            touch-action: none; /* Важливо для малювання на мобільних, щоб не скролити сторінку */
+            max-width: 100%; /* Полотно не буде виходити за межі екрану */
+        }
+    </style>
 </head>
 <body>
-    <h1>🎨 Vibe Paint</h1>
+
+    <h1>🎨 Пеінт Онлайн</h1>
+
     <div class="controls">
         <label for="colorPicker">Колір:</label>
         <input type="color" id="colorPicker" value="#000000">
-
+        
         <label for="brushSize">Розмір:</label>
         <input type="range" id="brushSize" min="1" max="50" value="5">
         <span id="brushSizeValue">5</span>
-
-        <button id="clearButton">Очистити</button>
+        
+        <button id="clearButton" class="clear-button">Очистити</button>
+        <button id="saveButton" class="save-button">Зберегти</button>
     </div>
+
     <canvas id="paintCanvas"></canvas>
 
-    <script src="script.js"></script>
+    <script>
+        const canvas = document.getElementById('paintCanvas');
+        const ctx = canvas.getContext('2d');
+
+        const colorPicker = document.getElementById('colorPicker');
+        const brushSizeInput = document.getElementById('brushSize');
+        const brushSizeValue = document.getElementById('brushSizeValue');
+        const clearButton = document.getElementById('clearButton');
+        const saveButton = document.getElementById('saveButton');
+
+        let painting = false;
+        let brushColor = '#000000';
+        let brushWidth = 5;
+
+        // Функція для заливки полотна білим фоном
+        function fillCanvasBackground() {
+            ctx.fillStyle = '#fff';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+        }
+
+        // Функція для встановлення/оновлення розміру полотна
+        function resizeCanvas() {
+            // Зберігаємо поточний малюнок
+            const currentDrawing = canvas.toDataURL();
+
+            // Встановлюємо розмір полотна, враховуючи розмір панелі інструментів
+            const controlsHeight = document.querySelector('.controls').offsetHeight;
+            const availableHeight = window.innerHeight - controlsHeight - 80; // 80px - відступи та заголовок
+
+            canvas.width = document.body.clientWidth * 0.95;
+            canvas.height = availableHeight;
+            
+            // Заливаємо нове полотно білим кольором
+            fillCanvasBackground();
+
+            // Відновлюємо попередній малюнок
+            const img = new Image();
+            img.src = currentDrawing;
+            img.onload = () => {
+                ctx.drawImage(img, 0, 0);
+            };
+        }
+
+        function getEventCoordinates(event) {
+            const rect = canvas.getBoundingClientRect();
+            if (event.touches) {
+                return { x: event.touches[0].clientX - rect.left, y: event.touches[0].clientY - rect.top };
+            }
+            return { x: event.clientX - rect.left, y: event.clientY - rect.top };
+        }
+
+        function startPosition(e) {
+            e.preventDefault();
+            painting = true;
+            draw(e);
+        }
+
+        function endPosition() {
+            painting = false;
+            ctx.beginPath();
+        }
+
+        function draw(e) {
+            if (!painting) return;
+            e.preventDefault();
+            
+            const { x, y } = getEventCoordinates(e);
+
+            ctx.lineWidth = brushWidth;
+            ctx.lineCap = 'round';
+            ctx.strokeStyle = brushColor;
+            ctx.lineTo(x, y);
+            ctx.stroke();
+            ctx.beginPath();
+            ctx.moveTo(x, y);
+        }
+        
+        // --- Слухачі подій для інструментів ---
+        colorPicker.addEventListener('input', (e) => { brushColor = e.target.value; });
+        brushSizeInput.addEventListener('input', (e) => {
+            brushWidth = e.target.value;
+            brushSizeValue.textContent = brushWidth;
+        });
+        clearButton.addEventListener('click', fillCanvasBackground);
+        
+        saveButton.addEventListener('click', () => {
+            const link = document.createElement('a');
+            link.download = `малюнок_${Date.now()}.png`;
+            link.href = canvas.toDataURL('image/png');
+            link.click();
+        });
+
+        // --- Слухачі подій для малювання ---
+        canvas.addEventListener('mousedown', startPosition);
+        canvas.addEventListener('mouseup', endPosition);
+        canvas.addEventListener('mousemove', draw);
+        canvas.addEventListener('mouseout', endPosition);
+        
+        canvas.addEventListener('touchstart', startPosition);
+        canvas.addEventListener('touchend', endPosition);
+        canvas.addEventListener('touchmove', draw);
+        canvas.addEventListener('touchcancel', endPosition);
+        
+        // --- Ініціалізація та адаптивність ---
+        window.addEventListener('resize', resizeCanvas);
+        // Встановлюємо початковий розмір полотна при завантаженні сторінки
+        resizeCanvas();
+    </script>
 </body>
 </html>
