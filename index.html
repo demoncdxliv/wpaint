@@ -11,7 +11,6 @@
             color: #333;
             margin: 0;
             padding: 15px;
-            /* Центруємо весь вміст */
             display: flex;
             flex-direction: column;
             align-items: center;
@@ -27,7 +26,7 @@
 
         .controls {
             display: flex;
-            flex-wrap: wrap; /* Дозволяє переносити елементи на новий рядок на малих екранах */
+            flex-wrap: wrap;
             justify-content: center;
             align-items: center;
             gap: 10px 15px;
@@ -37,11 +36,18 @@
             box-shadow: 0 2px 5px rgba(0,0,0,0.1);
             width: 100%;
             max-width: 900px;
-            box-sizing: border-box; /* Враховує padding у ширину */
+            box-sizing: border-box;
         }
-        
+
         .controls label {
             font-weight: bold;
+        }
+
+        /* Цей контейнер будемо ховати/показувати */
+        #color-picker-wrapper {
+            display: inline-flex;
+            align-items: center;
+            gap: 10px;
         }
 
         .controls input[type="color"] {
@@ -53,41 +59,35 @@
             padding: 0;
         }
 
-        /* Стилі для кнопок */
         .controls button {
             padding: 10px 15px;
-            border: none;
-            color: white;
+            border: 1px solid #ccc;
+            background-color: #f9f9f9;
+            color: #333;
             font-size: 16px;
             border-radius: 5px;
             cursor: pointer;
-            transition: background-color 0.3s;
+            transition: background-color 0.3s, border-color 0.3s;
         }
 
-        .clear-button {
-            background-color: #ff4757;
-        }
-        
-        .save-button {
-            background-color: #28a745;
-        }
-        
-        .clear-button:hover {
-            background-color: #e04050;
+        .controls button.active {
+            background-color: #0366d6;
+            color: white;
+            border-color: #0366d6;
         }
 
-        .save-button:hover {
-            background-color: #218838;
-        }
+        .clear-button { background-color: #ff4757; color: white; border-color: #ff4757; }
+        .save-button { background-color: #28a745; color: white; border-color: #28a745; }
+        .clear-button:hover { background-color: #e04050; }
+        .save-button:hover { background-color: #218838; }
 
-        /* Стилі для полотна */
         #paintCanvas {
             border: 2px solid #ccc;
-            background-color: #fff; /* Білий фон для збереження у PNG */
+            background-color: #fff;
             cursor: crosshair;
             box-shadow: 0 4px 8px rgba(0,0,0,0.1);
-            touch-action: none; /* Важливо для малювання на мобільних, щоб не скролити сторінку */
-            max-width: 100%; /* Полотно не буде виходити за межі екрану */
+            touch-action: none;
+            max-width: 100%;
         }
     </style>
 </head>
@@ -96,13 +96,21 @@
     <h1>🎨 Пеінт Онлайн</h1>
 
     <div class="controls">
-        <label for="colorPicker">Колір:</label>
-        <input type="color" id="colorPicker" value="#000000">
-        
+        <button id="brushButton" class="active">🖌️ Пензлик</button>
+        <button id="undoButton">↩️ Відмінити</button>
+        <hr style="width:1px;height:24px;background:#ccc;border:none;margin:0 5px;">
+
+        <span id="color-picker-wrapper">
+            <label for="colorPicker">Колір:</label>
+            <input type="color" id="colorPicker" value="#000000">
+        </span>
+
         <label for="brushSize">Розмір:</label>
         <input type="range" id="brushSize" min="1" max="50" value="5">
         <span id="brushSizeValue">5</span>
-        
+        <hr style="width:1px;height:24px;background:#ccc;border:none;margin:0 5px;">
+
+        <button id="eraserButton">🧽 Гумка</button>
         <button id="clearButton" class="clear-button">Очистити</button>
         <button id="saveButton" class="save-button">Зберегти</button>
     </div>
@@ -113,43 +121,101 @@
         const canvas = document.getElementById('paintCanvas');
         const ctx = canvas.getContext('2d');
 
+        const colorPickerWrapper = document.getElementById('color-picker-wrapper');
         const colorPicker = document.getElementById('colorPicker');
         const brushSizeInput = document.getElementById('brushSize');
         const brushSizeValue = document.getElementById('brushSizeValue');
+        const brushButton = document.getElementById('brushButton');
+        const eraserButton = document.getElementById('eraserButton');
         const clearButton = document.getElementById('clearButton');
         const saveButton = document.getElementById('saveButton');
+        const undoButton = document.getElementById('undoButton');
 
         let painting = false;
+        let isErasing = false;
         let brushColor = '#000000';
         let brushWidth = 5;
+        let history = [];
 
-        // Функція для заливки полотна білим фоном
+        // --- НОВІ ТА ОНОВЛЕНІ ФУНКЦІЇ ---
+
+        function updateEraserCursor() {
+            // Мінімальний розмір курсору - 2px, щоб його було видно
+            const size = Math.max(brushWidth, 2);
+            // Створюємо SVG-рядок з динамічним розміром
+            const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 ${size} ${size}">
+                            <circle cx="${size / 2}" cy="${size / 2}" r="${size / 2 - 1}" fill="none" stroke="black" stroke-width="1.5"/>
+                       </svg>`;
+            // Встановлюємо кастомний курсор для полотна
+            canvas.style.cursor = `url('data:image/svg+xml;utf8,${encodeURIComponent(svg)}') ${size / 2} ${size / 2}, auto`;
+        }
+
+        brushButton.addEventListener('click', () => {
+            isErasing = false;
+            brushButton.classList.add('active');
+            eraserButton.classList.remove('active');
+            canvas.style.cursor = 'crosshair'; // Повертаємо стандартний курсор
+            colorPickerWrapper.style.display = 'inline-flex'; // Показуємо палітру
+        });
+
+        eraserButton.addEventListener('click', () => {
+            isErasing = true;
+            eraserButton.classList.add('active');
+            brushButton.classList.remove('active');
+            updateEraserCursor(); // Встановлюємо курсор-гумку
+            colorPickerWrapper.style.display = 'none'; // Ховаємо палітру
+        });
+
+        brushSizeInput.addEventListener('input', (e) => {
+            brushWidth = e.target.value;
+            brushSizeValue.textContent = brushWidth;
+            // Якщо активована гумка, оновлюємо розмір її курсору в реальному часі
+            if (isErasing) {
+                updateEraserCursor();
+            }
+        });
+
+
+        // --- СТАРІ ФУНКЦІЇ (без змін) ---
+
         function fillCanvasBackground() {
             ctx.fillStyle = '#fff';
             ctx.fillRect(0, 0, canvas.width, canvas.height);
         }
 
-        // Функція для встановлення/оновлення розміру полотна
-        function resizeCanvas() {
-            // Зберігаємо поточний малюнок
-            const currentDrawing = canvas.toDataURL();
+        function saveState() {
+            if (history.length > 20) { history.shift(); }
+            history.push(canvas.toDataURL());
+        }
 
-            // Встановлюємо розмір полотна, враховуючи розмір панелі інструментів
+        function restoreState() {
+            if (history.length > 1) {
+                history.pop();
+                const lastState = history[history.length - 1];
+                const img = new Image();
+                img.src = lastState;
+                img.onload = () => {
+                    ctx.clearRect(0, 0, canvas.width, canvas.height);
+                    ctx.drawImage(img, 0, 0);
+                };
+            } else if (history.length === 1) {
+                 fillCanvasBackground();
+            }
+        }
+
+        function resizeCanvas() {
+            const currentDrawing = canvas.toDataURL();
             const controlsHeight = document.querySelector('.controls').offsetHeight;
-            const availableHeight = window.innerHeight - controlsHeight - 80; // 80px - відступи та заголовок
+            const availableHeight = window.innerHeight - controlsHeight - 80;
 
             canvas.width = document.body.clientWidth * 0.95;
             canvas.height = availableHeight;
-            
-            // Заливаємо нове полотно білим кольором
+
             fillCanvasBackground();
 
-            // Відновлюємо попередній малюнок
             const img = new Image();
             img.src = currentDrawing;
-            img.onload = () => {
-                ctx.drawImage(img, 0, 0);
-            };
+            img.onload = () => { ctx.drawImage(img, 0, 0); };
         }
 
         function getEventCoordinates(event) {
@@ -167,6 +233,7 @@
         }
 
         function endPosition() {
+            if (painting) { saveState(); }
             painting = false;
             ctx.beginPath();
         }
@@ -174,26 +241,26 @@
         function draw(e) {
             if (!painting) return;
             e.preventDefault();
-            
+
             const { x, y } = getEventCoordinates(e);
+
+            ctx.strokeStyle = isErasing ? '#ffffff' : brushColor;
 
             ctx.lineWidth = brushWidth;
             ctx.lineCap = 'round';
-            ctx.strokeStyle = brushColor;
             ctx.lineTo(x, y);
             ctx.stroke();
             ctx.beginPath();
             ctx.moveTo(x, y);
         }
-        
-        // --- Слухачі подій для інструментів ---
+
         colorPicker.addEventListener('input', (e) => { brushColor = e.target.value; });
-        brushSizeInput.addEventListener('input', (e) => {
-            brushWidth = e.target.value;
-            brushSizeValue.textContent = brushWidth;
+
+        clearButton.addEventListener('click', () => {
+            fillCanvasBackground();
+            saveState();
         });
-        clearButton.addEventListener('click', fillCanvasBackground);
-        
+
         saveButton.addEventListener('click', () => {
             const link = document.createElement('a');
             link.download = `малюнок_${Date.now()}.png`;
@@ -201,21 +268,21 @@
             link.click();
         });
 
-        // --- Слухачі подій для малювання ---
+        undoButton.addEventListener('click', restoreState);
+
         canvas.addEventListener('mousedown', startPosition);
         canvas.addEventListener('mouseup', endPosition);
         canvas.addEventListener('mousemove', draw);
         canvas.addEventListener('mouseout', endPosition);
-        
+
         canvas.addEventListener('touchstart', startPosition);
         canvas.addEventListener('touchend', endPosition);
         canvas.addEventListener('touchmove', draw);
         canvas.addEventListener('touchcancel', endPosition);
-        
-        // --- Ініціалізація та адаптивність ---
+
         window.addEventListener('resize', resizeCanvas);
-        // Встановлюємо початковий розмір полотна при завантаженні сторінки
         resizeCanvas();
+        saveState();
     </script>
 </body>
 </html>
